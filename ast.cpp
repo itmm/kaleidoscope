@@ -6,23 +6,32 @@
 #include <vector>
 #include <iostream>
 #include <map>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Verifier.h>
 
 namespace Ast {
 	class Expression {
 		public:
 			virtual ~Expression() {}
+			virtual llvm::Value *codegen() = 0;
 	};
 
 	class Number: public Expression {
 			double value_;
 		public:
 			Number(double value): value_ { value } { }
+
+			llvm::Value *codegen() override;
 	};
 
 	class Variable: public Expression {
 			std::string name_;
 		public:
 			Variable(const std::string &name): name_ { name } { }
+
+			llvm::Value *codegen() override;
 	};
 
 	class Binary: public Expression {
@@ -32,6 +41,8 @@ namespace Ast {
 			Binary(char op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right):
 				op_ { op }, left_ { std::move(left) }, right_ { std::move(right) }
 			{ }
+
+			llvm::Value *codegen() override;
 	};
 
 	class Call: public Expression {
@@ -41,6 +52,7 @@ namespace Ast {
 			Call(const std::string &callee, std::vector<std::unique_ptr<Expression>> args):
 				callee_ { callee }, args_ { std::move(args) }
 			{ }
+			llvm::Value *codegen() override;
 	};
 
 	class Prototype: public Expression {
@@ -51,6 +63,7 @@ namespace Ast {
 				name_ { name }, args_ { std::move(args) }
 			{ }
 
+			llvm::Function *codegen() override;
 			const std::string &name() const { return name_; }
 	};
 
@@ -61,6 +74,7 @@ namespace Ast {
 			Function(std::unique_ptr<Prototype> proto, std::unique_ptr<Expression> body):
 				proto_ { std::move(proto) }, body_ { std::move(body) }
 			{ }
+			llvm::Function *codegen() override;
 	};
 }
 
@@ -71,6 +85,92 @@ std::unique_ptr<Ast::Expression> log_error(const std::string &msg) {
 
 std::unique_ptr<Ast::Prototype> log_prototype_error(const std::string &msg) {
 	log_error(msg);
+	return nullptr;
+}
+
+llvm::Value *log_value_error(const std::string &msg) {
+	log_error(msg);
+	return nullptr;
+}
+
+static std::unique_ptr<llvm::LLVMContext> the_context;
+static std::unique_ptr<llvm::IRBuilder<>> builder;
+static std::unique_ptr<llvm::Module> the_module;
+static std::map<std::string, llvm::Value *> named_values;
+
+llvm::Value *Ast::Number::codegen() {
+	return llvm::ConstantFP::get(*the_context, llvm::APFloat(value_));
+}
+
+llvm::Value *Ast::Variable::codegen() {
+	auto value { named_values[name_] };
+	if (! value) { return log_value_error("unknown variable name"); }
+	return value;
+}
+
+llvm::Value *Ast::Binary::codegen() {
+	auto left { left_->codegen() };
+	auto right { right_->codegen() };
+	if (! left || ! right) { return nullptr; }
+
+	switch (op_) {
+		case '+': return builder->CreateFAdd(left, right, "addtemp");
+		case '-': return builder->CreateFSub(left, right, "subtemp");
+		case '*': return builder->CreateFMul(left, right, "multemp");
+		case '<':
+			left = builder->CreateFCmpULT(left, right, "cmptemp");
+			return builder->CreateUIToFP(left, llvm::Type::getDoubleTy(*the_context), "booltemp");
+		default:
+			return log_value_error("invalid binary operator");
+	}
+}
+
+llvm::Value *Ast::Call::codegen() {
+	auto callee { the_module->getFunction(callee_) };
+	if (! callee) { return log_value_error("unknown function referenced"); }
+	if (callee->arg_size() != args_.size()) {
+		return log_value_error("incorrect numbers of arguments passed");
+	}
+	std::vector<llvm::Value *> args;
+	for (auto &arg : args_) {
+		args.push_back(arg->codegen());
+		if (! args.back()) { return nullptr; }
+	}
+	return builder->CreateCall(callee, args, "calltmp");
+}
+
+llvm::Function *Ast::Prototype::codegen() {
+	std::vector<llvm::Type *> doubles(args_.size(), llvm::Type::getDoubleTy(*the_context));
+	auto ft { llvm::FunctionType::get(llvm::Type::getDoubleTy(*the_context), doubles, false) };
+	auto f { llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name_, the_module.get()) };
+	unsigned idx { 0 };
+	for (auto &arg : f->args()) {
+		arg.setName(args_[idx++].c_str());
+	}
+	return f;
+}
+
+llvm::Function *Ast::Function::codegen() {
+	auto fn { the_module->getFunction(proto_->name()) };
+	if (! fn) { fn = proto_->codegen(); };
+	if (! fn) { return nullptr; }
+	if (! fn->empty()) {
+		log_value_error("function cannot be redefined.");
+		return nullptr;
+	}
+	auto bb { llvm::BasicBlock::Create(*the_context, "entry", fn) };
+	builder->SetInsertPoint(bb);
+
+	named_values.clear();
+	for (auto &arg : fn->args()) {
+		named_values[std::string(arg.getName())] = &arg;
+	}
+	if (auto retval { body_->codegen() }) {
+		builder->CreateRet(retval);
+		llvm::verifyFunction(*fn);
+		return fn;
+	}
+	fn->eraseFromParent();
 	return nullptr;
 }
 
@@ -198,20 +298,33 @@ std::unique_ptr<Ast::Function> parse_top_level_expr() {
 }
 
 void handle_definition() {
-	if (parse_definition()) {
-		std::cerr << "parsed a function definition.\n";
+	if (auto ast { parse_definition() }) {
+		if (auto ir { ast->codegen() }) {
+			std::cerr << "parsed a function definition.\n";
+			ir->print(llvm::errs());
+			std::cerr << '\n';
+		}
 	} else { next_tok(); }
 }
 
 void handle_extern() {
-	if (parse_extern()) {
-		std::cerr << "parsed an extern.\n";
+	if (auto ast { parse_extern() }) {
+		if (auto ir { ast->codegen() }) {
+			std::cerr << "parsed an extern.\n";
+			ir->print(llvm::errs());
+			std::cerr << '\n';
+		}
 	} else { next_tok(); }
 }
 
 void handle_top_level_expr() {
-	if (parse_top_level_expr()) {
-		std::cerr << "parsed a top-level expression.\n";
+	if (auto ast { parse_top_level_expr() }) {
+		if (auto ir { ast->codegen() }) {
+			std::cerr << "parsed a top-level expression.\n";
+			ir->print(llvm::errs());
+			std::cerr << '\n';
+			ir->eraseFromParent();
+		}
 	} else { next_tok(); }
 }
 
@@ -229,6 +342,11 @@ void mainloop() {
 }
 
 int main() {
+	the_context = std::make_unique<llvm::LLVMContext>();
+	the_module = std::make_unique<llvm::Module>("kaleidoscope", *the_context);
+	builder = std::make_unique<llvm::IRBuilder<>>(*the_context);
+	std::cerr << "> ";
 	next_tok();
 	mainloop();
+	the_module->print(llvm::errs(), nullptr);
 }

@@ -19,7 +19,7 @@ build/%.o: %.cpp
 
 $(APP): $(OBJECTs)
 	@echo "link $@"
-	@$(CXX) $^ -o $@
+	@$(CXX) $^ -o $@ -lLLVM-11
 
 clean:
 	@echo "clean"
