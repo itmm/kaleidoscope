@@ -7,9 +7,13 @@
 #include <iostream>
 #include <map>
 #include <llvm/IR/Value.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/GVN.h>
 
 namespace Ast {
 	class Expression {
@@ -96,6 +100,8 @@ llvm::Value *log_value_error(const std::string &msg) {
 static std::unique_ptr<llvm::LLVMContext> the_context;
 static std::unique_ptr<llvm::IRBuilder<>> builder;
 static std::unique_ptr<llvm::Module> the_module;
+static std::unique_ptr<llvm::legacy::FunctionPassManager> the_fpm;
+
 static std::map<std::string, llvm::Value *> named_values;
 
 llvm::Value *Ast::Number::codegen() {
@@ -168,6 +174,7 @@ llvm::Function *Ast::Function::codegen() {
 	if (auto retval { body_->codegen() }) {
 		builder->CreateRet(retval);
 		llvm::verifyFunction(*fn);
+		the_fpm->run(*fn);
 		return fn;
 	}
 	fn->eraseFromParent();
@@ -344,6 +351,12 @@ void mainloop() {
 int main() {
 	the_context = std::make_unique<llvm::LLVMContext>();
 	the_module = std::make_unique<llvm::Module>("kaleidoscope", *the_context);
+	the_fpm = std::make_unique<llvm::legacy::FunctionPassManager>(the_module.get());
+	the_fpm->add(llvm::createInstructionCombiningPass());
+	the_fpm->add(llvm::createReassociatePass());
+	the_fpm->add(llvm::createGVNPass());
+	the_fpm->add(llvm::createCFGSimplificationPass());
+	the_fpm->doInitialization();
 	builder = std::make_unique<llvm::IRBuilder<>>(*the_context);
 	std::cerr << "> ";
 	next_tok();
