@@ -1,6 +1,8 @@
 #include "ast.h"
 #include "tok.h"
 
+#include "KaleidoscopeJIT.h"
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -11,6 +13,8 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Target/TargetMachine.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
@@ -101,6 +105,7 @@ static std::unique_ptr<llvm::LLVMContext> the_context;
 static std::unique_ptr<llvm::IRBuilder<>> builder;
 static std::unique_ptr<llvm::Module> the_module;
 static std::unique_ptr<llvm::legacy::FunctionPassManager> the_fpm;
+static std::unique_ptr<llvm::orc::KaleidoscopeJIT> the_jit;
 
 static std::map<std::string, llvm::Value *> named_values;
 
@@ -298,7 +303,7 @@ std::unique_ptr<Ast::Prototype> parse_extern() {
 
 std::unique_ptr<Ast::Function> parse_top_level_expr() {
 	if (auto expr { parse_expression() }) {
-		auto proto { std::make_unique<Ast::Prototype>("", std::vector<std::string>()) };
+		auto proto { std::make_unique<Ast::Prototype>("__anon_expr", std::vector<std::string>()) };
 		return std::make_unique<Ast::Function>(std::move(proto), std::move(expr));
 	}
 	return nullptr;
@@ -324,13 +329,34 @@ void handle_extern() {
 	} else { next_tok(); }
 }
 
+void init_module_and_fpm() {
+	the_context = std::make_unique<llvm::LLVMContext>();
+	the_module = std::make_unique<llvm::Module>("kaleidoscope", *the_context);
+	the_module->setDataLayout(the_jit->getTargetMachine().createDataLayout());
+	builder = std::make_unique<llvm::IRBuilder<>>(*the_context);
+	the_fpm = std::make_unique<llvm::legacy::FunctionPassManager>(the_module.get());
+	the_fpm->add(llvm::createInstructionCombiningPass());
+	the_fpm->add(llvm::createReassociatePass());
+	the_fpm->add(llvm::createGVNPass());
+	the_fpm->add(llvm::createCFGSimplificationPass());
+	the_fpm->doInitialization();
+}
+
 void handle_top_level_expr() {
 	if (auto ast { parse_top_level_expr() }) {
 		if (auto ir { ast->codegen() }) {
-			std::cerr << "parsed a top-level expression.\n";
 			ir->print(llvm::errs());
-			std::cerr << '\n';
-			ir->eraseFromParent();
+			auto h { the_jit->addModule(std::move(the_module)) };
+			auto expr { the_jit->findSymbol("__anon_expr") };
+			assert(expr && "function not found");
+			auto addr { expr.getAddress() };
+			assert(addr && "no address");
+			double (*fp)() = (double (*)()) *addr;
+			std::cerr << "addr " << (size_t) fp << "\n";
+			double got { fp() };
+			std::cerr << "evaluated to: " << got << '\n';
+			the_jit->removeModule(h);
+			init_module_and_fpm();
 		}
 	} else { next_tok(); }
 }
@@ -349,17 +375,13 @@ void mainloop() {
 }
 
 int main() {
-	the_context = std::make_unique<llvm::LLVMContext>();
-	the_module = std::make_unique<llvm::Module>("kaleidoscope", *the_context);
-	the_fpm = std::make_unique<llvm::legacy::FunctionPassManager>(the_module.get());
-	the_fpm->add(llvm::createInstructionCombiningPass());
-	the_fpm->add(llvm::createReassociatePass());
-	the_fpm->add(llvm::createGVNPass());
-	the_fpm->add(llvm::createCFGSimplificationPass());
-	the_fpm->doInitialization();
-	builder = std::make_unique<llvm::IRBuilder<>>(*the_context);
+	llvm::InitializeNativeTarget();
+	llvm::InitializeNativeTargetAsmPrinter();
+	llvm::InitializeNativeTargetAsmParser();
+	the_jit = std::make_unique<llvm::orc::KaleidoscopeJIT>();
 	std::cerr << "> ";
 	next_tok();
+	init_module_and_fpm();
 	mainloop();
 	the_module->print(llvm::errs(), nullptr);
 }
