@@ -1,4 +1,4 @@
-.PHONY: tests clean
+.PHONY: tests clean all
 
 APP = kaleidoscope
 SOURCEs = $(wildcard *.cpp)
@@ -9,6 +9,8 @@ CXXFLAGS += -g -Wall -std=c++17
 tests: $(APP)
 	@echo "run tests"
 	@./$(APP) 
+
+all: $(APP)
 
 include $(wildcard deps/*.dep)
 
