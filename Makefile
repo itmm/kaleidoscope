@@ -15,11 +15,11 @@ include $(wildcard deps/*.dep)
 build/%.o: %.cpp
 	@echo "c++ $@"
 	@mkdir -p build deps
-	@$(CXX) $(CXXFLAGS) -c $(notdir $(@:.o=.cpp)) -o $@ -MMD -MF deps/$(notdir $(@:.o=.dep))
+	@clang $(CXXFLAGS) -c $(notdir $(@:.o=.cpp)) -o $@ -MMD -MF deps/$(notdir $(@:.o=.dep))
 
 $(APP): $(OBJECTs)
 	@echo "link $@"
-	@$(CXX) $^ -o $@ -lLLVM-11
+	@clang $^ -o $@ -lLLVM-11 -lstdc++
 
 clean:
 	@echo "clean"
