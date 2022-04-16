@@ -1,23 +1,20 @@
 #include "ast.h"
 #include "tok.h"
 
-#include "KaleidoscopeJIT.h"
+#include <llvm/IR/Value.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/GVN.h>
 
 #include <memory>
 #include <string>
 #include <vector>
 #include <iostream>
 #include <map>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Verifier.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Target/TargetMachine.h>
-#include <llvm/Transforms/InstCombine/InstCombine.h>
-#include <llvm/Transforms/Scalar.h>
-#include <llvm/Transforms/Scalar/GVN.h>
 
 namespace Ast {
 	class Expression {
@@ -103,9 +100,9 @@ llvm::Value *log_value_error(const std::string &msg) {
 
 static std::unique_ptr<llvm::LLVMContext> the_context;
 static std::unique_ptr<llvm::IRBuilder<>> builder;
-static std::unique_ptr<llvm::Module> the_module;
+std::unique_ptr<llvm::Module> the_module;
 static std::unique_ptr<llvm::legacy::FunctionPassManager> the_fpm;
-static std::unique_ptr<llvm::orc::KaleidoscopeJIT> the_jit;
+std::unique_ptr<llvm::orc::KaleidoscopeJIT> the_jit;
 
 static std::map<std::string, llvm::Value *> named_values;
 
@@ -362,6 +359,8 @@ void handle_top_level_expr() {
 }
 
 void mainloop() {
+	std::cerr << "> ";
+	next_tok();
 	for (;;) {
 		std::cerr << "> ";
 		switch (cur_tok) {
@@ -374,14 +373,3 @@ void mainloop() {
 	}
 }
 
-int main() {
-	llvm::InitializeNativeTarget();
-	llvm::InitializeNativeTargetAsmPrinter();
-	llvm::InitializeNativeTargetAsmParser();
-	the_jit = std::make_unique<llvm::orc::KaleidoscopeJIT>();
-	std::cerr << "> ";
-	next_tok();
-	init_module_and_fpm();
-	mainloop();
-	the_module->print(llvm::errs(), nullptr);
-}
