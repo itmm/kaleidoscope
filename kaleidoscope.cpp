@@ -1,4 +1,5 @@
-#include "ast.h"
+#include "code.h"
+#include "parse.h"
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetMachine.h>
 
