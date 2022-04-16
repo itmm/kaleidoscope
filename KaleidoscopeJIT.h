@@ -21,18 +21,32 @@ namespace llvm { namespace orc {
 			using ObjLayerT = LegacyRTDyldObjectLinkingLayer;
 			using CompileLayerT = LegacyIRCompileLayer<ObjLayerT, SimpleCompiler>;
 
-			KaleidoscopeJIT() : Resolver(createLegacyLookupResolver(
-				ES,
-				[this](const llvm::StringRef Name) { return findMangledSymbol((std::string) Name); },
-				[](Error Err) { cantFail(std::move(Err), "lookupFlags failed"); }
-			)), TM(EngineBuilder().selectTarget()), DL(TM->createDataLayout()),
-			ObjectLayer(AcknowledgeORCv1Deprecation, ES,
-				[this](VModuleKey) {
-					return ObjLayerT::Resources{ std::make_shared<SectionMemoryManager>(), Resolver };
-				}
-			), CompileLayer(AcknowledgeORCv1Deprecation, ObjectLayer,
-				SimpleCompiler(*TM)
-			) {
+			KaleidoscopeJIT() :
+				Resolver(createLegacyLookupResolver(
+					ES,
+					[this](const llvm::StringRef Name) {
+						return findMangledSymbol((std::string) Name);
+					},
+					[](Error Err) {
+						cantFail(std::move(Err), "lookupFlags failed");
+					}
+				)), TM(
+					EngineBuilder().selectTarget()
+				), DL(
+					TM->createDataLayout()
+				), ObjectLayer(
+					AcknowledgeORCv1Deprecation, ES,
+					[this](VModuleKey) {
+						return ObjLayerT::Resources{
+							std::make_shared<SectionMemoryManager>(),
+							Resolver
+						};
+					}
+				), CompileLayer(
+					AcknowledgeORCv1Deprecation, ObjectLayer,
+					SimpleCompiler(*TM)
+				)
+			{
 				llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
 			}
 

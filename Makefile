@@ -21,7 +21,7 @@ build/%.o: %.cpp
 
 $(APP): $(OBJECTs)
 	@echo "link $@"
-	@clang $^ -o $@ -lLLVM-11 -lstdc++
+	@clang $(CXXFLAGS) $^ -o $@ -lLLVM-11 -lstdc++
 
 clean:
 	@echo "clean"
