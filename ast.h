@@ -75,4 +75,4 @@ namespace Ast {
 }
 
 std::unique_ptr<Ast::Expression> log_error(const std::string &msg);
-
+std::unique_ptr<Ast::Prototype> log_prototype_error(const std::string &msg);
