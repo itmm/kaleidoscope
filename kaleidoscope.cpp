@@ -1,9 +1,11 @@
 #include "code.h"
 #include "parse.h"
+#include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetMachine.h>
 
-int main() {
+int main(int argc, char **argv) {
+	llvm::InitLLVM x(argc, argv);
 	llvm::InitializeNativeTarget();
 	llvm::InitializeNativeTargetAsmPrinter();
 	llvm::InitializeNativeTargetAsmParser();
