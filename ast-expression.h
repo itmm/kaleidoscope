@@ -30,7 +30,7 @@ namespace ast {
 
 		public:
 			Variable(const std::string& name): name_ { name } { }
-			llvm::Value* generate_code() override { return nullptr; }
+			llvm::Value* generate_code() override;
 	};
 
 	class Binary: public Expression {
@@ -68,6 +68,8 @@ namespace ast {
 				name_ { name }, args_ { std::move(args) }
 			{ }
 
+			std::string name() const { return name_; }
+
 			llvm::Function* generate_code();
 	};
 
@@ -83,6 +85,8 @@ namespace ast {
 			Function(Prototype_Ptr prototype, Expression_Ptr body):
 				prototype_ { std::move(prototype) }, body_ { std::move(body) }
 			{ }
+
+			llvm::Function* generate_code();
 	};
 
 	using Function_Ptr = std::unique_ptr<Function>;

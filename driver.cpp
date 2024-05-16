@@ -9,33 +9,29 @@ using namespace ast;
 static inline void handle_definition() {
 	if (auto ast { parse_definition() }) {
 		std::cerr << "parsed a function definition.\n";
-		/*
-		if (auto ir { ast->codegen() }) {
+		if (auto ir { ast->generate_code() }) {
 			ir->print(llvm::errs());
 			std::cerr << '\n';
 		}
-		*/
 	} else { next_tok(); }
 }
 
 static inline void handle_extern() {
 	if (auto ast { parse_extern() }) {
 		std::cerr << "parsed an extern.\n";
-		/*
-		if (auto ir { ast->codegen() }) {
+		if (auto ir { ast->generate_code() }) {
 			ir->print(llvm::errs());
 			std::cerr << '\n';
 		}
-		 */
 	} else { next_tok(); }
 }
 
 static void handle_top_level_expr() {
 	if (auto ast { parse_top_level_expr() }) {
 		std::cerr << "parsed a top-level expression.\n";
-		/*
-		if (auto ir { ast->codegen() }) {
+		if (auto ir { ast->generate_code() }) {
 			ir->print(llvm::errs());
+			/*
 			auto h { the_jit->addModule(std::move(the_module)) };
 			auto expr { the_jit->findSymbol("__anon_expr") };
 			assert(expr && "function not found");
@@ -47,8 +43,9 @@ static void handle_top_level_expr() {
 			std::cerr << "evaluated to: " << got << '\n';
 			the_jit->removeModule(h);
 			init_module_and_fpm();
+			 */
+			ir->removeFromParent();
 		}
-		 */
 	} else { next_tok(); }
 }
 
@@ -75,8 +72,6 @@ int main() {
 	the_jit = std::make_unique<llvm::orc::KaleidoscopeJIT>();
 	 */
 	init_module_and_fpm();
-	/*
-	the_module->print(llvm::errs(), nullptr);
-	 */
 	mainloop();
+	the_module->print(llvm::errs(), nullptr);
 }

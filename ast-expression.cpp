@@ -5,6 +5,7 @@
 #include <iostream>
 #include <llvm/ADT/APFloat.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/Verifier.h>
 #include <map>
 
 namespace ast {
@@ -26,6 +27,19 @@ namespace ast {
 
 	llvm::Value* Number::generate_code() {
 		return llvm::ConstantFP::get(*the_context, llvm::APFloat(value_));
+	}
+
+	llvm::Value *log_value_error(const char* msg) {
+		log_expression_error(msg);
+		return nullptr;
+	}
+
+	static std::map<std::string, llvm::Value *> named_values;
+
+	llvm::Value* Variable::generate_code() {
+		auto value { named_values[name_] };
+		if (! value) { return log_value_error("unknown variable name"); }
+		return value;
 	}
 
 	static Expression_Ptr parse_paren_expression() {
@@ -100,11 +114,6 @@ namespace ast {
 		}
 	}
 
-	llvm::Value *log_value_error(const char* msg) {
-		log_expression_error(msg);
-		return nullptr;
-	}
-
 	llvm::Value* Binary::generate_code() {
 		auto left { left_hand_side_->generate_code() };
 		auto right { right_hand_side_->generate_code() };
@@ -153,4 +162,28 @@ namespace ast {
 		return f;
 	}
 
+	llvm::Function* Function::generate_code() {
+		auto fn { the_module->getFunction(prototype_->name()) };
+		if (! fn) { fn = prototype_->generate_code(); };
+		if (! fn) { return nullptr; }
+		if (! fn->empty()) {
+			log_value_error("function cannot be redefined.");
+			return nullptr;
+		}
+		auto bb { llvm::BasicBlock::Create(*the_context, "entry", fn) };
+		builder->SetInsertPoint(bb);
+
+		named_values.clear();
+		for (auto &arg : fn->args()) {
+			named_values[std::string(arg.getName())] = &arg;
+		}
+		if (auto retval { body_->generate_code() }) {
+			builder->CreateRet(retval);
+			llvm::verifyFunction(*fn);
+			//the_fpm->run(*fn);
+			return fn;
+		}
+		fn->eraseFromParent();
+		return nullptr;
+	}
 }
