@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 
+/*
 namespace llvm {
 namespace orc {
 
@@ -136,4 +137,5 @@ private:
 } // end namespace orc
 } // end namespace llvm
 
+*/
 #endif // LLVM_EXECUTIONENGINE_ORC_KALEIDOSCOPEJIT_H

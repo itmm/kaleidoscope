@@ -1,3 +1,4 @@
+/*
 #include "code.h"
 #include "ast.h"
 #include "tok.h"
@@ -115,3 +116,5 @@ void init_module_and_fpm() {
 	the_fpm->doInitialization();
 }
 
+
+ */
