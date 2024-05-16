@@ -1,10 +1,17 @@
 #include <iostream>
+#include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
+#include <llvm/ExecutionEngine/JITSymbol.h>
+#include <llvm/Support/TargetSelect.h>
+#include <memory>
 
 #include "ast.h"
 #include "code.h"
 #include "tok.h"
 
+
 using namespace ast;
+
+static llvm::ExitOnError ExitOnErr;
 
 static inline void handle_definition() {
 	if (auto ast { parse_definition() }) {
@@ -12,6 +19,8 @@ static inline void handle_definition() {
 		if (auto ir { ast->generate_code() }) {
 			ir->print(llvm::errs());
 			std::cerr << '\n';
+			ExitOnErr(the_jit->addModule(llvm::orc::ThreadSafeModule(std::move(the_module), std::move(the_context))));
+			init_module_and_fpm();
 		}
 	} else { next_tok(); }
 }
@@ -22,6 +31,7 @@ static inline void handle_extern() {
 		if (auto ir { ast->generate_code() }) {
 			ir->print(llvm::errs());
 			std::cerr << '\n';
+			ast::FunctionProtos[ast->name()] = std::move(ast);
 		}
 	} else { next_tok(); }
 }
@@ -31,20 +41,17 @@ static void handle_top_level_expr() {
 		std::cerr << "parsed a top-level expression.\n";
 		if (auto ir { ast->generate_code() }) {
 			ir->print(llvm::errs());
-			/*
-			auto h { the_jit->addModule(std::move(the_module)) };
-			auto expr { the_jit->findSymbol("__anon_expr") };
+			auto rt { the_jit->getMainJITDylib().createResourceTracker() };
+			auto tsm { llvm::orc::ThreadSafeModule(std::move(the_module), std::move(the_context)) };
+			ExitOnErr(the_jit->addModule(std::move(tsm), rt));
+			init_module_and_fpm();
+
+			auto expr { ExitOnErr(the_jit->lookup("__anon_expr")) };
 			assert(expr && "function not found");
-			auto addr { expr.getAddress() };
-			assert(addr && "no address");
-			double (*fp)() = (double (*)()) *addr;
-			std::cerr << "addr " << (size_t) fp << "\n";
+			double (*fp)() = reinterpret_cast<double (*)()>(expr.getAddress());
 			double got { fp() };
 			std::cerr << "evaluated to: " << got << '\n';
-			the_jit->removeModule(h);
-			init_module_and_fpm();
-			 */
-			ir->removeFromParent();
+			ExitOnErr(rt->remove());
 		}
 	} else { next_tok(); }
 }
@@ -65,12 +72,10 @@ static inline void mainloop() {
 int main() {
 	std::cerr << "> ";
 	next_tok();
-	/*
 	llvm::InitializeNativeTarget();
 	llvm::InitializeNativeTargetAsmPrinter();
 	llvm::InitializeNativeTargetAsmParser();
-	the_jit = std::make_unique<llvm::orc::KaleidoscopeJIT>();
-	 */
+	the_jit = ExitOnErr(llvm::orc::KaleidoscopeJIT::Create());
 	init_module_and_fpm();
 	mainloop();
 	the_module->print(llvm::errs(), nullptr);

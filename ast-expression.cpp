@@ -131,8 +131,19 @@ namespace ast {
 		}
 	}
 
+	std::map<std::string, Prototype_Ptr> FunctionProtos;
+
+	static llvm::Function* get_function(std::string name) {
+		if (auto* f = the_module->getFunction(name)) { return f; }
+		auto fi { FunctionProtos.find(name) };
+		if (fi != FunctionProtos.end()) {
+			return fi->second->generate_code();
+		}
+		return nullptr;
+	}
+
 	llvm::Value* Call::generate_code() {
-		auto callee { the_module->getFunction(callee_) };
+		auto callee { get_function(callee_) };
 		if (! callee) { return log_value_error("unknown function referenced"); }
 		if (callee->arg_size() != args_.size()) {
 			return log_value_error("incorrect numbers of arguments passed");
@@ -163,8 +174,10 @@ namespace ast {
 	}
 
 	llvm::Function* Function::generate_code() {
-		auto fn { the_module->getFunction(prototype_->name()) };
-		if (! fn) { fn = prototype_->generate_code(); };
+		auto& p { *prototype_ };
+		FunctionProtos[p.name()] = std::move(prototype_);
+		auto fn { the_module->getFunction(p.name()) };
+		if (! fn) { fn = p.generate_code(); };
 		if (! fn) { return nullptr; }
 		if (! fn->empty()) {
 			log_value_error("function cannot be redefined.");

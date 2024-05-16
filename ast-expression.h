@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -92,4 +93,6 @@ namespace ast {
 	using Function_Ptr = std::unique_ptr<Function>;
 
 	Expression_Ptr parse_expression();
+
+	extern std::map<std::string, Prototype_Ptr> FunctionProtos;
 };
