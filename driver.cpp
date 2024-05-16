@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "ast.h"
+#include "code.h"
 #include "tok.h"
 
 using namespace ast;
@@ -72,7 +73,9 @@ int main() {
 	llvm::InitializeNativeTargetAsmPrinter();
 	llvm::InitializeNativeTargetAsmParser();
 	the_jit = std::make_unique<llvm::orc::KaleidoscopeJIT>();
+	 */
 	init_module_and_fpm();
+	/*
 	the_module->print(llvm::errs(), nullptr);
 	 */
 	mainloop();

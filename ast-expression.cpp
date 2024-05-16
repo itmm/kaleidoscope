@@ -1,7 +1,10 @@
 #include "ast-expression.h"
+#include "code.h"
 #include "tok.h"
 
 #include <iostream>
+#include <llvm/ADT/APFloat.h>
+#include <llvm/IR/Constants.h>
 #include <map>
 
 namespace ast {
@@ -21,6 +24,10 @@ namespace ast {
 		return result;
 	}
 
+	llvm::Value* Number::generate_code() {
+		return llvm::ConstantFP::get(*the_context, llvm::APFloat(value_));
+	}
+
 	static Expression_Ptr parse_paren_expression() {
 		next_tok();
 		auto inner { parse_expression() };
@@ -34,7 +41,7 @@ namespace ast {
 		next_tok();
 		if (cur_tok != '(') { return std::make_unique<Variable>(name); };
 		next_tok();
-		std::vector<std::unique_ptr<Expression>> args;
+		std::vector<Expression_Ptr> args;
 		if (cur_tok != ')') {
 			for (;;) {
 				if (auto arg { parse_expression() }) {
@@ -74,10 +81,10 @@ namespace ast {
 		return precedence <= 0 ? -1 : precedence;
 	}
 
-	static Expression_Ptr parse_binary_op_right(int precendence, Expression_Ptr left) {
+	static Expression_Ptr parse_binary_op_right(int precedence, Expression_Ptr left) {
 		for (;;) {
 			auto tok_prec { get_tok_precedence() };
-			if (tok_prec < precendence) {
+			if (tok_prec < precedence) {
 				return left;
 			}
 			int op { cur_tok };
@@ -93,9 +100,57 @@ namespace ast {
 		}
 	}
 
+	llvm::Value *log_value_error(const char* msg) {
+		log_expression_error(msg);
+		return nullptr;
+	}
+
+	llvm::Value* Binary::generate_code() {
+		auto left { left_hand_side_->generate_code() };
+		auto right { right_hand_side_->generate_code() };
+		if (! left || ! right) { return nullptr; }
+
+		switch (op_) {
+			case '+': return builder->CreateFAdd(left, right, "addtemp");
+			case '-': return builder->CreateFSub(left, right, "subtemp");
+			case '*': return builder->CreateFMul(left, right, "multemp");
+			case '<':
+				left = builder->CreateFCmpULT(left, right, "cmptemp");
+				return builder->CreateUIToFP(left, llvm::Type::getDoubleTy(*the_context), "booltemp");
+			default:
+				return log_value_error("invalid binary operator");
+		}
+	}
+
+	llvm::Value* Call::generate_code() {
+		auto callee { the_module->getFunction(callee_) };
+		if (! callee) { return log_value_error("unknown function referenced"); }
+		if (callee->arg_size() != args_.size()) {
+			return log_value_error("incorrect numbers of arguments passed");
+		}
+		std::vector<llvm::Value *> args;
+		for (auto &arg : args_) {
+			args.push_back(arg->generate_code());
+			if (! args.back()) { return nullptr; }
+		}
+		return builder->CreateCall(callee, args, "calltmp");
+	}
+
 	Expression_Ptr parse_expression() {
 		auto left { parse_primary() };
 		if (! left) { return nullptr; }
 		return parse_binary_op_right(0, std::move(left));
 	}
+
+	llvm::Function *Prototype::generate_code() {
+		std::vector<llvm::Type *> doubles(args_.size(), llvm::Type::getDoubleTy(*the_context));
+		auto ft { llvm::FunctionType::get(llvm::Type::getDoubleTy(*the_context), doubles, false) };
+		auto f { llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name_, the_module.get()) };
+		unsigned idx { 0 };
+		for (auto &arg : f->args()) {
+			arg.setName(args_[idx++]);
+		}
+		return f;
+	}
+
 }
