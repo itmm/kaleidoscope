@@ -180,7 +180,7 @@ namespace ast {
 		if (auto retval { body_->generate_code() }) {
 			builder->CreateRet(retval);
 			llvm::verifyFunction(*fn);
-			//the_fpm->run(*fn);
+			the_fpm->run(*fn);
 			return fn;
 		}
 		fn->eraseFromParent();
