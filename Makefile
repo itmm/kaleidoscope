@@ -1,10 +1,10 @@
-.PHONY: tests clean all
+.PHONY: all tests clean
 
 APP = kaleidoscope
 SOURCEs = $(wildcard *.cpp)
 OBJECTs = $(addprefix build/,$(SOURCEs:.cpp=.o))
 
-CXXFLAGS += -g -Wall -std=c++17
+CXXFLAGS += `llvm-config --cxxflags`
 
 tests: $(APP)
 	@echo "run tests"
@@ -17,11 +17,11 @@ include $(wildcard deps/*.dep)
 build/%.o: %.cpp
 	@echo "c++ $@"
 	@mkdir -p build deps
-	@clang $(CXXFLAGS) -c $(notdir $(@:.o=.cpp)) -o $@ -MMD -MF deps/$(notdir $(@:.o=.dep))
+	$(CXX) $(CXXFLAGS) -c $(notdir $(@:.o=.cpp)) -o $@ -MMD -MF deps/$(notdir $(@:.o=.dep))
 
 $(APP): $(OBJECTs)
 	@echo "link $@"
-	@clang $(CXXFLAGS) $^ -o $@ -lLLVM-11 -lstdc++
+	@$(CXX) $^ -o $@ `llvm-config --libs`
 
 clean:
 	@echo "clean"
