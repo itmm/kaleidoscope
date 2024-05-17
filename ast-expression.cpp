@@ -72,6 +72,51 @@ namespace ast {
 		return std::make_unique<Call>(name, std::move(args));
 	}
 
+	static Expression_Ptr parse_if_expression() {
+		next_tok();
+		auto condition { parse_expression() };
+		if (! condition) { return nullptr; }
+		if (cur_tok != tok_then) { return log_expression_error("expected then"); }
+		next_tok();
+		auto then { parse_expression() };
+		if (! then) { return nullptr; }
+		if (cur_tok != tok_else) { return log_expression_error("expected else"); }
+		next_tok();
+		auto els { parse_expression() };
+		if (! els) { return nullptr; }
+		return std::make_unique<If>(std::move(condition), std::move(then), std::move(els));
+	}
+
+	llvm::Value* If::generate_code() {
+		auto condition_value { condition_->generate_code() };
+		if (! condition_value) { return nullptr; }
+		condition_value = builder->CreateFCmpONE(condition_value, llvm::ConstantFP::get(*the_context, llvm::APFloat(0.0)), "ifcond");
+		llvm::Function* the_function = builder->GetInsertBlock()->getParent();
+		llvm::BasicBlock* then_bb = llvm::BasicBlock::Create(*the_context, "then", the_function);
+		llvm::BasicBlock* else_bb = llvm::BasicBlock::Create(*the_context, "else");
+		llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(*the_context, "ifcont");
+		builder->CreateCondBr(condition_value, then_bb, else_bb);
+		builder->SetInsertPoint(then_bb);
+		auto then_value { then_->generate_code() };
+		if (! then_value) { return nullptr; }
+		builder->CreateBr(merge_bb);
+		then_bb = builder->GetInsertBlock();
+
+		the_function->insert(the_function->end(), else_bb);
+		builder->SetInsertPoint(else_bb);
+		auto else_value { else_->generate_code() };
+		if (! else_value) { return nullptr; }
+		builder->CreateBr(merge_bb);
+		else_bb = builder->GetInsertBlock();
+
+		the_function->insert(the_function->end(), merge_bb);
+		builder->SetInsertPoint(merge_bb);
+		llvm::PHINode* pn = builder->CreatePHI(llvm::Type::getDoubleTy(*the_context), 2, "iftmp");
+		pn->addIncoming(then_value, then_bb);
+		pn->addIncoming(else_value, else_bb);
+		return pn;
+	}
+
 	static Expression_Ptr parse_primary() {
 		switch (cur_tok) {
 			case tok_identifier:
@@ -80,6 +125,8 @@ namespace ast {
 				return parse_number_expression();
 			case '(':
 				return parse_paren_expression();
+			case tok_if:
+				return parse_if_expression();
 			default:
 				return log_expression_error("unknown token when expecting expression");
 		}

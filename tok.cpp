@@ -16,6 +16,10 @@ static inline int parse_identifier() {
 
 	if (identifier == "def") { return tok_def; }
 	if (identifier == "extern") { return tok_extern; }
+	if (identifier == "if") { return tok_if; }
+	if (identifier == "then") { return tok_then; }
+	if (identifier == "else") { return tok_else; }
+
 	return tok_identifier;
 }
 

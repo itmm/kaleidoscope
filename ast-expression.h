@@ -60,6 +60,20 @@ namespace ast {
 			llvm::Value* generate_code() override;
 	};
 
+	class If: public Expression {
+			Expression_Ptr condition_;
+			Expression_Ptr then_;
+			Expression_Ptr else_;
+
+		public:
+			If(Expression_Ptr condition, Expression_Ptr then, Expression_Ptr els):
+				condition_ { std::move(condition) }, then_ { std::move(then) },
+				else_ { std::move(els) }
+			{ }
+
+			llvm::Value * generate_code() override;
+	};
+
 	class Prototype {
 			std::string name_;
 			std::vector<std::string> args_;
