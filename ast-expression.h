@@ -22,7 +22,7 @@ namespace ast {
 			double value_;
 
 		public:
-			Number(double value): value_ { value } { }
+			explicit Number(double value): value_ { value } { }
 			llvm::Value* generate_code() override;
 	};
 
@@ -30,7 +30,7 @@ namespace ast {
 			std::string name_;
 
 		public:
-			Variable(const std::string& name): name_ { name } { }
+			explicit Variable(std::string name): name_ { std::move(name) } { }
 			llvm::Value* generate_code() override;
 	};
 
@@ -54,8 +54,8 @@ namespace ast {
 			std::vector<Expression_Ptr> args_;
 
 		public:
-			Call(const std::string& callee, std::vector<Expression_Ptr> args):
-				callee_ { callee }, args_ { std::move(args) }
+			Call(std::string callee, std::vector<Expression_Ptr> args):
+				callee_ { std::move(callee) }, args_ { std::move(args) }
 			{ }
 			llvm::Value* generate_code() override;
 	};
@@ -74,16 +74,35 @@ namespace ast {
 			llvm::Value * generate_code() override;
 	};
 
+	class For: public Expression {
+			std::string var_name_;
+			Expression_Ptr start_;
+			Expression_Ptr end_;
+			Expression_Ptr step_;
+			Expression_Ptr body_;
+
+		public:
+			For(
+				std::string  var_name, Expression_Ptr start, Expression_Ptr end,
+				Expression_Ptr step, Expression_Ptr body
+			):
+				var_name_ { std::move(var_name) }, start_ { std::move(start) },
+				end_ { std::move(end) }, step_ { std::move(step) }, body_ { std::move(body) }
+			{ }
+
+			llvm::Value * generate_code() override;
+	};
+
 	class Prototype {
 			std::string name_;
 			std::vector<std::string> args_;
 
 		public:
-			Prototype(const std::string& name, std::vector<std::string> args):
-				name_ { name }, args_ { std::move(args) }
+			Prototype(std::string name, std::vector<std::string> args):
+				name_ { std::move(name) }, args_ { std::move(args) }
 			{ }
 
-			std::string name() const { return name_; }
+			[[nodiscard]] const std::string& name() const { return name_; }
 
 			llvm::Function* generate_code();
 	};

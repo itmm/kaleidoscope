@@ -21,7 +21,7 @@ build/%.o: %.cpp
 
 $(APP): $(OBJECTs)
 	@echo "link $@"
-	@$(CXX) $^ -o $@ `llvm-config --libs`
+	$(CXX) $^ -o $@ `llvm-config --libs`
 
 clean:
 	@echo "clean"

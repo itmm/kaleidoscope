@@ -117,6 +117,73 @@ namespace ast {
 		return pn;
 	}
 
+	static Expression_Ptr parse_for_expression() {
+		next_tok();
+		if (cur_tok != tok_identifier) {
+			return log_expression_error("expected identifier after for");
+		}
+		auto id_name = identifier;
+		next_tok();
+		if (cur_tok != '=')  { return log_expression_error("expected '=' after for"); }
+		next_tok();
+		auto start = parse_expression();
+		if (! start) { return nullptr; }
+		if (cur_tok != ',') {
+			return log_expression_error("expected ',' after for start value");
+		}
+		next_tok();
+		auto end = parse_expression();
+		if (! end) { return nullptr; }
+		Expression_Ptr step;
+		if (cur_tok == ',') {
+			next_tok();
+			step = parse_expression();
+			if (! step) { return nullptr; }
+		}
+		if (cur_tok != tok_in) { return log_expression_error("expected 'in' after for"); }
+		next_tok();
+		auto body = parse_expression();
+		if (! body) { return nullptr; }
+		return std::make_unique<For>(
+			id_name, std::move(start), std::move(end), std::move(step), std::move(body)
+		);
+	}
+
+	llvm::Value* For::generate_code() {
+		auto start_val { start_->generate_code() };
+		if (! start_val) { return nullptr; }
+		auto the_function { builder->GetInsertBlock()->getParent() };
+		auto preheader_bb { builder->GetInsertBlock() };
+		auto loop_bb { llvm::BasicBlock::Create(*the_context, "loop", the_function) };
+		builder->CreateBr(loop_bb);
+		builder->SetInsertPoint(loop_bb);
+		auto variable { builder->CreatePHI(llvm::Type::getDoubleTy(*the_context), 2, var_name_) };
+		variable->addIncoming(start_val, preheader_bb);
+		auto old_value { named_values[var_name_] };
+		named_values[var_name_] = variable;
+		if (! body_->generate_code()) { return nullptr; }
+		llvm::Value* step_value;
+		if (step_) {
+			step_value = step_->generate_code();
+			if (! step_value) { return nullptr; }
+		} else { step_value = llvm::ConstantFP::get(*the_context, llvm::APFloat(1.0)); }
+		auto next_var = builder->CreateFAdd(variable, step_value, "nextvar");
+		auto end_condition { end_->generate_code() };
+		if (! end_condition) { return nullptr; }
+		end_condition = builder->CreateFCmpONE(end_condition, llvm::ConstantFP::get(*the_context, llvm::APFloat(0.0)), "loopcond");
+		auto loop_end_bb = builder->GetInsertBlock();
+		auto after_bb { llvm::BasicBlock::Create(*the_context, "afterloop", the_function) };
+		builder->CreateCondBr(end_condition, loop_bb, after_bb);
+		builder->SetInsertPoint(after_bb);
+		variable->addIncoming(next_var, loop_end_bb);
+		if (old_value) {
+			named_values[var_name_] = old_value;
+		} else {
+			named_values.erase(var_name_);
+		}
+		return llvm::Constant::getNullValue(llvm::Type::getDoubleTy(*the_context));
+	}
+
 	static Expression_Ptr parse_primary() {
 		switch (cur_tok) {
 			case tok_identifier:
@@ -127,6 +194,8 @@ namespace ast {
 				return parse_paren_expression();
 			case tok_if:
 				return parse_if_expression();
+			case tok_for:
+				return parse_for_expression();
 			default:
 				return log_expression_error("unknown token when expecting expression");
 		}

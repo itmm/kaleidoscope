@@ -11,6 +11,11 @@
 
 using namespace ast;
 
+extern "C" double putchard(double v) {
+	fputc(static_cast<char>(v), stderr);
+	return 0.0;
+}
+
 static llvm::ExitOnError ExitOnErr;
 
 static inline void handle_definition() {
