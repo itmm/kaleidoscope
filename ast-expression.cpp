@@ -230,6 +230,17 @@ namespace ast {
 		}
 	}
 
+	std::map<std::string, Prototype_Ptr> FunctionProtos;
+
+	static llvm::Function* get_function(std::string name) {
+		if (auto* f = the_module->getFunction(name)) { return f; }
+		auto fi { FunctionProtos.find(name) };
+		if (fi != FunctionProtos.end()) {
+			return fi->second->generate_code();
+		}
+		return nullptr;
+	}
+
 	llvm::Value* Binary::generate_code() {
 		auto left { left_hand_side_->generate_code() };
 		auto right { right_hand_side_->generate_code() };
@@ -242,20 +253,13 @@ namespace ast {
 			case '<':
 				left = builder->CreateFCmpULT(left, right, "cmptemp");
 				return builder->CreateUIToFP(left, llvm::Type::getDoubleTy(*the_context), "booltemp");
-			default:
-				return log_value_error("invalid binary operator");
+			default: break;
 		}
-	}
 
-	std::map<std::string, Prototype_Ptr> FunctionProtos;
-
-	static llvm::Function* get_function(std::string name) {
-		if (auto* f = the_module->getFunction(name)) { return f; }
-		auto fi { FunctionProtos.find(name) };
-		if (fi != FunctionProtos.end()) {
-			return fi->second->generate_code();
-		}
-		return nullptr;
+		auto* f { get_function(std::string("binary") + op_) };
+		assert(f && "binary operator not found!");
+		llvm::Value* ops[2] { left, right };
+		return builder->CreateCall(f, ops, "binop");
 	}
 
 	llvm::Value* Call::generate_code() {
@@ -295,10 +299,10 @@ namespace ast {
 		auto fn { the_module->getFunction(p.name()) };
 		if (! fn) { fn = p.generate_code(); };
 		if (! fn) { return nullptr; }
-		if (! fn->empty()) {
-			log_value_error("function cannot be redefined.");
-			return nullptr;
+		if (p.is_binary_op()) {
+			binary_op_precendence[p.operator_name()] = p.binary_precedence();
 		}
+
 		auto bb { llvm::BasicBlock::Create(*the_context, "entry", fn) };
 		builder->SetInsertPoint(bb);
 

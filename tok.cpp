@@ -21,6 +21,8 @@ static inline int parse_identifier() {
 	if (identifier == "else") { return tok_else; }
 	if (identifier == "for") { return tok_for; }
 	if (identifier == "in") { return tok_in; }
+	if (identifier == "binary") { return tok_binary; }
+	if (identifier == "unary") { return tok_unary; }
 
 	return tok_identifier;
 }

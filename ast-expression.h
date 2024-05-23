@@ -96,13 +96,26 @@ namespace ast {
 	class Prototype {
 			std::string name_;
 			std::vector<std::string> args_;
+			bool is_operator_;
+			unsigned precedence_;
 
 		public:
-			Prototype(std::string name, std::vector<std::string> args):
-				name_ { std::move(name) }, args_ { std::move(args) }
+			Prototype(
+				std::string name, std::vector<std::string> args,
+				bool is_operator = false, unsigned precedence = 0
+			):
+				name_ { std::move(name) }, args_ { std::move(args) },
+				is_operator_ { is_operator }, precedence_ { precedence }
 			{ }
 
 			[[nodiscard]] const std::string& name() const { return name_; }
+			bool is_unary_op() const { return is_operator_ && args_.size() == 1; }
+			bool is_binary_op() const { return is_operator_ && args_.size() == 2; }
+			char operator_name() const {
+				assert(is_unary_op() || is_binary_op());
+				return name_[name_.size() - 1];
+			}
+			unsigned binary_precedence() const { return precedence_; }
 
 			llvm::Function* generate_code();
 	};
