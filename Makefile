@@ -1,10 +1,10 @@
 .PHONY: all tests clean
 
 APP = kaleidoscope
-SOURCEs = $(wildcard *.cpp)
+SOURCEs = $(filter-out toy.cpp,$(wildcard *.cpp))
 OBJECTs = $(addprefix build/,$(SOURCEs:.cpp=.o))
 
-CXXFLAGS += `llvm-config --cxxflags`
+CXXFLAGS += `llvm-config --cxxflags` -g
 
 tests: $(APP)
 	@echo "run tests"
@@ -22,6 +22,9 @@ build/%.o: %.cpp
 $(APP): $(OBJECTs)
 	@echo "link $@"
 	$(CXX) $^ -o $@ `llvm-config --libs`
+
+toy: toy.cpp
+	$(CXX) $(CXXFLAGS) toy.cpp `llvm-config --libs` -o toy
 
 clean:
 	@echo "clean"
