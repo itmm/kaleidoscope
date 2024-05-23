@@ -28,4 +28,4 @@ toy: toy.cpp
 
 clean:
 	@echo "clean"
-	@rm -Rf $(APP) build deps
+	@rm -Rf $(APP) toy build deps
