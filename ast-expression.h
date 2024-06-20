@@ -49,6 +49,17 @@ namespace ast {
 			llvm::Value* generate_code() override;
 	};
 
+	class Unary: public Expression {
+			char op_;
+			Expression_Ptr right_hand_side_;
+
+		public:
+			Unary(char op, Expression_Ptr right_hand_side):
+				op_ { op }, right_hand_side_ { std::move(right_hand_side) }
+			{ }
+			llvm::Value* generate_code() override { return nullptr; }
+	};
+
 	class Call: public Expression {
 			std::string callee_;
 			std::vector<Expression_Ptr> args_;
